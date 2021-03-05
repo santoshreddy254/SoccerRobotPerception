@@ -14,6 +14,7 @@ import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader as get_data_loader
+from torch.utils.tensorboard import SummaryWriter
 from torch import randperm
 from torch._utils import _accumulate
 import torchvision
@@ -31,6 +32,7 @@ from torch.optim import Adam
 from dataloader import Blobdataset, SegDataset, split_dataset
 from model import NimbRoNet2
 from train import train_model
+from metrics import evaluate_detection, evaluate_segmentation
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -42,6 +44,7 @@ print("Using device: ", device)
 
 batch_size = 2
 num_epochs = 1
+save_path = "./"
 print("======Loading detection dataset======")
 detection_dataset = Blobdataset("/home/santosh/MAS/CUDA_vision/Project/data/blob")
 train_detection_dataset, val_detection_dataset, test_detection_dataset = split_dataset(detection_dataset)
@@ -96,6 +99,26 @@ optimizer = Adam([{"params":model.encoder.parameters(), "lr":0.000001},
                 {"params":model.transpose_conv3.parameters(), "lr":0.001},
                 {"params":model.loc_dep_conv.parameters(), "lr":0.001}],
                 lr=0.001)
+                
+writer = SummaryWriter(save_path+'logs')
 
 print("======Training NimbRoNet2 model started======")
-train_model(model, num_epochs, train_detection_loader, train_seg_loader, val_detection_loader, val_seg_loader, optimizer, device)
+model = train_model(model, num_epochs, train_detection_loader, train_seg_loader, val_detection_loader, val_seg_loader, optimizer, writer, device)
+
+writer.flush()
+writer.close()
+
+print("Saving NimbRoNet2 model at: ", save_path)
+torch.save(model, save_path+"nimbronet2.pth")
+
+print("======Testing NimbRoNet2 model======")
+model = torch.load(save_path+"nimbronet2.pth")
+model.eval()
+f1_score, accuracy, recall, precision, fdr = evaluate_detection(model,test_detection_loader)
+print("Ball detection metrics: \n F1 score: %.3f, Accuracy: %.3f, Recall: %.3f, Precision: %.3f, FDR: %.3f"%(f1_score[0],accuracy[0],recall[0],precision[0],fdr[0]))
+print("Goal Post detection metrics: \n F1 score: %.3f, Accuracy: %.3f, Recall: %.3f, Precision: %.3f, FDR: %.3f"%(f1_score[1],accuracy[1],recall[1],precision[1],fdr[1]))
+print("Robot detection metrics: \n F1 score: %.3f, Accuracy: %.3f, Recall: %.3f, Precision: %.3f, FDR: %.3f"%(f1_score[2],accuracy[2],recall[2],precision[2],fdr[2]))
+acc, iou = evaluate_segmentation(model,test_seg_loader)
+print("Background: Accuracy: %.3f, IoU: %.3f"%(acc[0],iou[0]))
+print("Field: Accuracy: %.3f, IoU: %.3f"%(acc[1],iou[1]))
+print("Line: Accuracy: %.3f, IoU: %.3f"%(acc[2],iou[2]))

@@ -5,7 +5,7 @@ from metrics import evaluate_detection, evaluate_segmentation
 
 
 def train_model(model, num_epochs, train_det_loader, train_seg_loader,
-                val_detection_loader, val_seg_loader, optimizer,
+                val_detection_loader, val_seg_loader, optimizer, writer,
                 device=torch.device("cpu")):
 
     train_loss_blob = 0.0
@@ -21,12 +21,15 @@ def train_model(model, num_epochs, train_det_loader, train_seg_loader,
         print('#### Epoch_{}'.format(epoch))
         for i_batch, (image, label) in enumerate(train_det_loader):
             print("Batch:{}".format(i_batch))
-            if (i_batch < num_batches_lim):
+
+            if (i_batch < 5):
                 image = image.to(device)
                 label = label.to(device)
                 blob_output, seg_output = model(image)
 
                 crit_loss_blob = detection_loss(blob_output, label) + total_variation(blob_output)
+
+                writer.add_scalar("Det_Loss/train", crit_loss_blob.item(), (epoch+1)*i_batch)
 
 
                 print(crit_loss_blob.item())
@@ -48,11 +51,13 @@ def train_model(model, num_epochs, train_det_loader, train_seg_loader,
                 blob_output, seg_output = model(seg_input)
 
                 crit_loss_seg = segmentation_loss(seg_output, seg_target)
+
                 print(crit_loss_seg.item())
                 seg_variance_loss = total_variation(seg_output)
                 print(seg_variance_loss)
                 loss_seg = crit_loss_seg + seg_variance_loss
                 print(loss_seg.item())
+                writer.add_scalar("Seg_Loss/train", loss_seg.item(), (epoch+1)*i_batch)
                 loss_seg.backward()
 
                 train_loss_seg += loss_seg.item()
@@ -64,16 +69,23 @@ def train_model(model, num_epochs, train_det_loader, train_seg_loader,
             else:
                 break
         print("Evaluation after epoch: ",epoch+1)
-        f1_score, accuracy, recall, precision, fdr = evaluate_detection(model,val_loader_detection)
+        f1_score, accuracy, recall, precision, fdr = evaluate_detection(model,val_detection_loader)
         print("Ball detection metrics: \n F1 score: %.3f, Accuracy: %.3f, Recall: %.3f, Precision: %.3f, FDR: %.3f"%(f1_score[0],accuracy[0],recall[0],precision[0],fdr[0]))
+        writer.add_scalar("Ball_Detection/eval", accuracy[0], epoch)
         print("Goal Post detection metrics: \n F1 score: %.3f, Accuracy: %.3f, Recall: %.3f, Precision: %.3f, FDR: %.3f"%(f1_score[1],accuracy[1],recall[1],precision[1],fdr[1]))
+        writer.add_scalar("Goal_post_Detection/eval", accuracy[1], epoch)
         print("Robot detection metrics: \n F1 score: %.3f, Accuracy: %.3f, Recall: %.3f, Precision: %.3f, FDR: %.3f"%(f1_score[2],accuracy[2],recall[2],precision[2],fdr[2]))
-        acc, iou = evaluate_segmentation(model,val_loader_segmentation)
+        writer.add_scalar("Robot_Detection/eval", accuracy[2], epoch)
+        acc, iou = evaluate_segmentation(model,val_seg_loader)
         print("Background: Accuracy: %.3f, IoU: %.3f"%(acc[0],iou[0]))
+        writer.add_scalar("Background_Segmentation/eval", acc[0], epoch)
         print("Field: Accuracy: %.3f, IoU: %.3f"%(acc[1],iou[1]))
+        writer.add_scalar("Field_Segmentation/eval", acc[1], epoch)
         print("Line: Accuracy: %.3f, IoU: %.3f"%(acc[2],iou[2]))
+        writer.add_scalar("Line_Segmentation/eval", acc[2], epoch)
+
 
     train_losses = [train_loss_blob, train_loss_seg]
 
 
-    return train_losses, model
+    return model
