@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import torch
 
 def get_centroids(image):
     image = image*255
@@ -41,8 +42,8 @@ def get_detection_metrics(predictions,targets):
                         break
                 if not match_found:
                     fn[i]+=1
-        
-    return tp,fp,fn,tn    
+
+    return tp,fp,fn,tn
 
 
 def evaluate_detection(model,dataloader):
@@ -56,7 +57,7 @@ def evaluate_detection(model,dataloader):
     f1_score = [0,0,0]
     fdr = [0,0,0]
     count = 0
-    for img, label in dataloader:    
+    for img, label in dataloader:
         prediction,_ = model(img)
         temp_tp,temp_fp,temp_fn,temp_tn = get_detection_metrics(prediction,label)
         tp+=temp_tp
