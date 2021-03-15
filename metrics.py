@@ -35,7 +35,7 @@ def get_detection_metrics(predictions,targets):
             for gt_point in gt_centroids:
                 match_found = False
                 for pred_point in pred_centroids:
-                    if np.linalg.norm(np.subtract(gt_point,pred_point)) <= 4:
+                    if np.linalg.norm(np.subtract(gt_point,pred_point)) <= 1:
                         match_found = True
                         tp[i]+=1
                         fp[i]-=1
@@ -46,7 +46,8 @@ def get_detection_metrics(predictions,targets):
     return tp,fp,fn,tn
 
 
-def evaluate_detection(model,dataloader):
+def evaluate_detection(model,dataloader,device):
+    model.eval()
     tp = np.zeros(3)
     fp = np.zeros(3)
     fn = np.zeros(3)
@@ -58,15 +59,16 @@ def evaluate_detection(model,dataloader):
     fdr = [0,0,0]
     count = 0
     for img, label in dataloader:
-        prediction,_ = model(img)
+        prediction,_ = model(img.to(device))
+        prediction = prediction.cpu()
         temp_tp,temp_fp,temp_fn,temp_tn = get_detection_metrics(prediction,label)
         tp+=temp_tp
         fp+=temp_fp
         fn+=temp_fn
         tn+=temp_tn
         count+=1
-        if count>5:
-            break
+        # if count>5:
+        #     break
     for i in range(3):
         recall[i] = tp[i]/(tp[i]+fn[i])
         precision[i] = tp[i]/(tp[i]+fp[i])
@@ -75,7 +77,8 @@ def evaluate_detection(model,dataloader):
         fdr[i] = 1-precision[i]
     return f1_score, accuracy, recall, precision, fdr
 
-def evaluate_segmentation(model,dataloader):
+def evaluate_segmentation(model,dataloader,device):
+    model.eval()
     gt_counts = [0,0,0]
     correct_counts = [0,0,0]
     pred_counts = [0,0,0]
@@ -83,15 +86,16 @@ def evaluate_segmentation(model,dataloader):
     iou = [0,0,0]
     count = 0
     for img,label in dataloader:
-        _, segmentation = model(img)
+        _, segmentation = model(img.to(device))
+        segmentation = segmentation.cpu()
         _, pred_segmentation = torch.max(segmentation, dim=1)
         for i in range(3):
             gt_counts[i]+=(label == i).sum().item()
             correct_counts[i]+=((label == i) & (pred_segmentation == i)).sum().item()
             pred_counts[i]+=(pred_segmentation == i).sum().item()
         count+=1
-        if count>5:
-            break
+        # if count>5:
+        #     break
     for i in range(3):
         acc[i] = correct_counts[i]/gt_counts[i]
         iou[i] = correct_counts[i]/(gt_counts[i]+pred_counts[i]-correct_counts[i])
